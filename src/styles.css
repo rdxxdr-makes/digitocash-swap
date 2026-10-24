@@ -5,7 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * DigiToCash design system — dark charcoal, navy cards, neon cyan accents.
+ * DigiToCash design system — deep navy/violet, navy cards, neon cyan accents,
+ * emerald (cash) and vivid purple (UPI) highlights.
  * The app is intentionally always dark: :root carries the dark palette.
  */
 
@@ -38,56 +39,62 @@
   --color-ring: var(--ring);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-cash: var(--cash);
+  --color-upi: var(--upi);
   --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
 :root {
   --radius: 0.75rem;
-  --background: oklch(0.163 0.026 261);
+  --background: oklch(0.17 0.04 280);
   --foreground: oklch(0.95 0.01 240);
-  --card: oklch(0.213 0.034 259);
+  --card: oklch(0.21 0.04 272);
   --card-foreground: oklch(0.95 0.01 240);
-  --popover: oklch(0.213 0.034 259);
+  --popover: oklch(0.21 0.04 272);
   --popover-foreground: oklch(0.95 0.01 240);
   --primary: oklch(0.82 0.15 200);
   --primary-foreground: oklch(0.16 0.03 260);
-  --secondary: oklch(0.27 0.04 258);
+  --secondary: oklch(0.27 0.05 275);
   --secondary-foreground: oklch(0.95 0.01 240);
-  --muted: oklch(0.25 0.033 258);
-  --muted-foreground: oklch(0.67 0.028 250);
-  --accent: oklch(0.29 0.05 240);
+  --muted: oklch(0.25 0.045 275);
+  --muted-foreground: oklch(0.68 0.035 265);
+  --accent: oklch(0.29 0.06 270);
   --accent-foreground: oklch(0.95 0.01 240);
   --destructive: oklch(0.62 0.2 25);
   --destructive-foreground: oklch(0.98 0.003 247.858);
   --success: oklch(0.78 0.17 150);
   --success-foreground: oklch(0.16 0.03 150);
-  --border: oklch(0.31 0.04 256);
-  --input: oklch(0.31 0.04 256);
+  --cash: oklch(0.8 0.17 162);
+  --upi: oklch(0.66 0.22 286);
+  --border: oklch(0.32 0.05 272);
+  --input: oklch(0.32 0.05 272);
   --ring: oklch(0.82 0.15 200);
 }
 
 .dark {
-  --background: oklch(0.163 0.026 261);
+  --background: oklch(0.17 0.04 280);
   --foreground: oklch(0.95 0.01 240);
-  --card: oklch(0.213 0.034 259);
+  --card: oklch(0.21 0.04 272);
   --card-foreground: oklch(0.95 0.01 240);
-  --popover: oklch(0.213 0.034 259);
+  --popover: oklch(0.21 0.04 272);
   --popover-foreground: oklch(0.95 0.01 240);
   --primary: oklch(0.82 0.15 200);
   --primary-foreground: oklch(0.16 0.03 260);
-  --secondary: oklch(0.27 0.04 258);
+  --secondary: oklch(0.27 0.05 275);
   --secondary-foreground: oklch(0.95 0.01 240);
-  --muted: oklch(0.25 0.033 258);
-  --muted-foreground: oklch(0.67 0.028 250);
-  --accent: oklch(0.29 0.05 240);
+  --muted: oklch(0.25 0.045 275);
+  --muted-foreground: oklch(0.68 0.035 265);
+  --accent: oklch(0.29 0.06 270);
   --accent-foreground: oklch(0.95 0.01 240);
   --destructive: oklch(0.62 0.2 25);
   --destructive-foreground: oklch(0.98 0.003 247.858);
   --success: oklch(0.78 0.17 150);
   --success-foreground: oklch(0.16 0.03 150);
-  --border: oklch(0.31 0.04 256);
-  --input: oklch(0.31 0.04 256);
+  --cash: oklch(0.8 0.17 162);
+  --upi: oklch(0.66 0.22 286);
+  --border: oklch(0.32 0.05 272);
+  --input: oklch(0.32 0.05 272);
   --ring: oklch(0.82 0.15 200);
 }
 
@@ -100,13 +107,20 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     background-image:
-      radial-gradient(600px circle at 15% 0%, color-mix(in oklab, var(--primary) 9%, transparent), transparent 55%),
-      radial-gradient(700px circle at 90% 20%, color-mix(in oklab, var(--primary) 6%, transparent), transparent 60%);
+      radial-gradient(700px circle at 12% -5%, color-mix(in oklab, var(--upi) 14%, transparent), transparent 55%),
+      radial-gradient(600px circle at 88% 10%, color-mix(in oklab, var(--primary) 9%, transparent), transparent 55%),
+      radial-gradient(800px circle at 50% 110%, color-mix(in oklab, var(--upi) 7%, transparent), transparent 60%);
     background-attachment: fixed;
   }
 }
 
-/* Neon glow for primary actions and highlighted cards */
+/* Cyan-to-violet gradient for primary actions */
+@utility btn-gradient {
+  background-image: linear-gradient(115deg, var(--primary) 0%, oklch(0.7 0.18 240) 45%, var(--upi) 100%);
+  color: var(--primary-foreground);
+}
+
+/* Neon glows */
 @utility glow {
   box-shadow:
     0 0 24px -4px color-mix(in oklab, var(--primary) 45%, transparent),
@@ -115,6 +129,18 @@
 
 @utility glow-sm {
   box-shadow: 0 0 16px -6px color-mix(in oklab, var(--primary) 45%, transparent);
+}
+
+@utility glow-cash {
+  box-shadow:
+    0 0 22px -6px color-mix(in oklab, var(--cash) 55%, transparent),
+    inset 0 0 28px -20px color-mix(in oklab, var(--cash) 70%, transparent);
+}
+
+@utility glow-upi {
+  box-shadow:
+    0 0 22px -6px color-mix(in oklab, var(--upi) 60%, transparent),
+    inset 0 0 28px -20px color-mix(in oklab, var(--upi) 70%, transparent);
 }
 
 @utility terminal-shadow {
