@@ -524,7 +524,6 @@ function Index() {
       <Dialog open={onboardingOpen}>
         <DialogContent
           className="max-w-sm rounded-2xl border-border bg-card sm:max-w-sm"
-          showCloseButton={false}
           onEscapeKeyDown={(e) => e.preventDefault()}
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
