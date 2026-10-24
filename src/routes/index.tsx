@@ -6,6 +6,7 @@ import {
   Bot,
   Check,
   MapPin,
+  Pencil,
   QrCode,
   ShieldCheck,
   Smartphone,
@@ -48,6 +49,22 @@ export const Route = createFileRoute("/")({
 type Direction = "cash2upi" | "upi2cash";
 type Phase = "idle" | "matching" | "matched";
 
+type Profile = {
+  name: string;
+  location: string;
+  cash: number;
+  upi: number;
+};
+
+type ProfileForm = {
+  name: string;
+  location: string;
+  cash: string;
+  upi: string;
+};
+
+const STORAGE_KEY = "digitocash-profile";
+
 const TERMINAL_LINES = [
   "$ digitocash agent run --subnet in-mum-01",
   "Broadcasting to subnet...",
@@ -66,6 +83,10 @@ const PEER = {
 
 function formatINR(value: number) {
   return `₹${value.toLocaleString("en-IN")}`;
+}
+
+function toDigits(value: string) {
+  return value.replace(/[^0-9]/g, "").slice(0, 7);
 }
 
 /** Deterministic mock QR code (decorative only). */
@@ -111,7 +132,48 @@ function MockQr() {
   );
 }
 
+function ProfileFields({ form, setForm }: { form: ProfileForm; setForm: (f: ProfileForm) => void }) {
+  const field = (key: keyof ProfileForm) => ({
+    value: form[key],
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm({ ...form, [key]: key === "name" || key === "location" ? e.target.value : toDigits(e.target.value) }),
+  });
+
+  return (
+    <div className="grid gap-4">
+      <div>
+        <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">Name</label>
+        <Input {...field("name")} placeholder="Your name" />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Location
+        </label>
+        <Input {...field("location")} placeholder="e.g. Indore" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-cash">
+            Starting Cash (₹)
+          </label>
+          <Input {...field("cash")} inputMode="numeric" placeholder="2500" className="font-mono" />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-upi">Starting UPI (₹)</label>
+          <Input {...field("upi")} inputMode="numeric" placeholder="4000" className="font-mono" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Index() {
+  // undefined = still checking saved profile; null = no profile yet (onboarding)
+  const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [form, setForm] = useState<ProfileForm>({ name: "", location: "", cash: "", upi: "" });
+
   const [direction, setDirection] = useState<Direction>("cash2upi");
   const [amount, setAmount] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -119,8 +181,37 @@ function Index() {
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [pin, setPin] = useState("0000");
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        setProfile(JSON.parse(raw) as Profile);
+      } else {
+        setProfile(null);
+        setOnboardingOpen(true);
+      }
+    } catch {
+      setProfile(null);
+      setOnboardingOpen(true);
+    }
+  }, []);
+
   const amountNum = Number(amount) || 0;
   const matching = phase === "matching";
+  const cash = profile?.cash ?? 0;
+  const upi = profile?.upi ?? 0;
+
+  const initials = useMemo(
+    () =>
+      (profile?.name ?? "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((w) => w[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase(),
+    [profile?.name],
+  );
 
   useEffect(() => {
     if (phase !== "matching") return;
@@ -134,6 +225,44 @@ function Index() {
     ];
     return () => timers.forEach(clearTimeout);
   }, [phase]);
+
+  const submitProfile = (isEdit: boolean) => {
+    const name = form.name.trim();
+    if (!name) {
+      toast.error("Enter your name to continue");
+      return;
+    }
+    const saved: Profile = {
+      name,
+      location: form.location.trim() || "Unknown location",
+      cash: Number(form.cash) || 0,
+      upi: Number(form.upi) || 0,
+    };
+    setProfile(saved);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    } catch {
+      // storage unavailable — profile just lives for this session
+    }
+    setOnboardingOpen(false);
+    setEditOpen(false);
+    if (isEdit) {
+      toast.success("Profile updated", { description: `${saved.name} · ${saved.location}` });
+    } else {
+      toast.success(`Welcome, ${saved.name}!`, { description: `Agent ready in ${saved.location}` });
+    }
+  };
+
+  const openEdit = () => {
+    if (!profile) return;
+    setForm({
+      name: profile.name,
+      location: profile.location,
+      cash: String(profile.cash),
+      upi: String(profile.upi),
+    });
+    setEditOpen(true);
+  };
 
   const activateAgent = () => {
     if (amountNum <= 0) {
@@ -165,8 +294,11 @@ function Index() {
     resetFlow();
   };
 
-  const dirLabel =
-    direction === "cash2upi" ? "Have Cash → Need UPI" : "Have UPI → Need Cash";
+  const dirLabel = direction === "cash2upi" ? "Have Cash → Need UPI" : "Have UPI → Need Cash";
+  const toggleClass = (active: boolean) =>
+    `flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors sm:text-sm ${
+      active ? "btn-gradient glow-sm" : "text-muted-foreground hover:text-foreground"
+    }`;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -192,23 +324,52 @@ function Index() {
             </span>
           </div>
         </div>
+
+        {/* User profile strip */}
+        {profile && (
+          <div className="mx-auto w-full max-w-2xl px-4 pb-3">
+            <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
+              <div className="btn-gradient glow-sm flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold">
+                {initials || "…"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-foreground">{profile.name}</p>
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5 text-primary" />
+                  {profile.location}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={openEdit}
+                aria-label="Edit profile and balances"
+                className="text-muted-foreground hover:text-primary"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="mx-auto grid w-full max-w-2xl grid-cols-2 gap-3 px-4 pb-5">
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-primary">
+          <div className="glow-cash flex items-center gap-3 rounded-xl border border-cash/25 bg-card px-4 py-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cash/15 text-cash">
               <Wallet className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Cash</p>
-              <p className="text-sm font-semibold text-foreground">₹2,500</p>
+              <p className="text-[11px] uppercase tracking-wide text-cash/80">Cash</p>
+              <p className="text-sm font-semibold text-cash">{formatINR(cash)}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-primary">
+          <div className="glow-upi flex items-center gap-3 rounded-xl border border-upi/30 bg-card px-4 py-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-upi/15 text-upi">
               <Smartphone className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">UPI</p>
-              <p className="text-sm font-semibold text-foreground">₹4,000</p>
+              <p className="text-[11px] uppercase tracking-wide text-upi/80">UPI</p>
+              <p className="text-sm font-semibold text-upi">{formatINR(upi)}</p>
             </div>
           </div>
         </div>
@@ -219,9 +380,7 @@ function Index() {
         {/* Swap card */}
         <section className="rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-6">
           <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Create a Swap
-            </h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Create a Swap</h2>
             <span className="rounded-full bg-muted px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
               {dirLabel}
             </span>
@@ -233,29 +392,11 @@ function Index() {
             role="group"
             aria-label="Swap direction"
           >
-            <button
-              type="button"
-              onClick={() => setDirection("cash2upi")}
-              aria-pressed={direction === "cash2upi"}
-              className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors sm:text-sm ${
-                direction === "cash2upi"
-                  ? "bg-primary text-primary-foreground glow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
+            <button type="button" onClick={() => setDirection("cash2upi")} aria-pressed={direction === "cash2upi"} className={toggleClass(direction === "cash2upi")}>
               <Banknote className="h-4 w-4 shrink-0" />
               Have Cash → Need UPI
             </button>
-            <button
-              type="button"
-              onClick={() => setDirection("upi2cash")}
-              aria-pressed={direction === "upi2cash"}
-              className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors sm:text-sm ${
-                direction === "upi2cash"
-                  ? "bg-primary text-primary-foreground glow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
+            <button type="button" onClick={() => setDirection("upi2cash")} aria-pressed={direction === "upi2cash"} className={toggleClass(direction === "upi2cash")}>
               <Smartphone className="h-4 w-4 shrink-0" />
               Have UPI → Need Cash
             </button>
@@ -294,13 +435,7 @@ function Index() {
             ))}
           </div>
 
-          <Button
-            type="button"
-            size="lg"
-            disabled={matching}
-            onClick={activateAgent}
-            className="glow mt-5 w-full text-base font-semibold"
-          >
+          <Button type="button" size="lg" disabled={matching} onClick={activateAgent} className="btn-gradient glow mt-5 w-full text-base font-semibold">
             <Bot className="mr-2 h-5 w-5" />
             {matching ? "Agent working…" : "Activate Agent"}
           </Button>
@@ -311,14 +446,14 @@ function Index() {
           <section className="terminal-shadow mt-5 animate-in fade-in slide-in-from-bottom-2 rounded-2xl border border-primary/30 bg-background/80 p-4 font-mono text-[13px] leading-relaxed duration-300">
             <div className="mb-3 flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
-              <span className="h-2.5 w-2.5 rounded-full bg-success/70" />
-              <span className="h-2.5 w-2.5 rounded-full bg-primary/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-cash/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-upi/70" />
               <span className="ml-2 text-[11px] text-muted-foreground">agent-terminal</span>
             </div>
             {TERMINAL_LINES.slice(0, visibleLines).map((line, i) => (
               <p
                 key={line}
-                className={i === TERMINAL_LINES.length - 1 ? "font-semibold text-success" : "text-primary/90"}
+                className={i === TERMINAL_LINES.length - 1 ? "font-semibold text-cash" : "text-primary/90"}
               >
                 <span className="animate-in fade-in duration-200">{line}</span>
               </p>
@@ -331,7 +466,7 @@ function Index() {
         {phase === "matched" && (
           <section className="glow mt-5 animate-in fade-in slide-in-from-bottom-2 rounded-2xl border border-primary/40 bg-card p-5 duration-300 sm:p-6">
             <div className="mb-4 flex items-center justify-between">
-              <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success">
+              <span className="rounded-full border border-cash/30 bg-cash/10 px-3 py-1 text-xs font-semibold text-cash">
                 Peer matched
               </span>
               <span className="font-mono text-[11px] text-muted-foreground">
@@ -346,7 +481,7 @@ function Index() {
                 <p className="font-semibold text-foreground">Peer ID #{PEER.id}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1 font-medium text-foreground">
-                    <Star className="h-4 w-4 fill-primary text-primary" />
+                    <Star className="h-4 w-4 fill-upi text-upi" />
                     {PEER.rating}★
                   </span>
                   <span className="flex items-center gap-1">
@@ -362,7 +497,7 @@ function Index() {
               </div>
             </div>
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-              <Button type="button" size="lg" onClick={openVerification} className="glow-sm flex-1 font-semibold">
+              <Button type="button" size="lg" onClick={openVerification} className="btn-gradient glow-sm flex-1 font-semibold">
                 <Check className="mr-2 h-5 w-5" />
                 Accept Swap
               </Button>
@@ -385,6 +520,50 @@ function Index() {
         <p className="text-center text-xs text-muted-foreground">Made by Rudraksh Goyal</p>
       </footer>
 
+      {/* Onboarding modal (first time only — cannot be dismissed) */}
+      <Dialog open={onboardingOpen}>
+        <DialogContent
+          className="max-w-sm rounded-2xl border-border bg-card sm:max-w-sm"
+          showCloseButton={false}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              Welcome to DigiToCash
+            </DialogTitle>
+            <DialogDescription>
+              Set up your profile and starting balances — the agent uses these to match peers for you.
+            </DialogDescription>
+          </DialogHeader>
+          <ProfileFields form={form} setForm={setForm} />
+          <Button type="button" size="lg" onClick={() => submitProfile(false)} className="btn-gradient glow-sm w-full font-semibold">
+            <Zap className="mr-2 h-5 w-5" />
+            Start Agent
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit profile modal */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-sm rounded-2xl border-border bg-card sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-primary" />
+              Edit Profile &amp; Balances
+            </DialogTitle>
+            <DialogDescription>Update your details and balances anytime.</DialogDescription>
+          </DialogHeader>
+          <ProfileFields form={form} setForm={setForm} />
+          <Button type="button" size="lg" onClick={() => submitProfile(true)} className="btn-gradient glow-sm w-full font-semibold">
+            <Check className="mr-2 h-5 w-5" />
+            Save Changes
+          </Button>
+        </DialogContent>
+      </Dialog>
+
       {/* Verification modal */}
       <Dialog open={verifyOpen} onOpenChange={setVerifyOpen}>
         <DialogContent className="max-w-sm rounded-2xl border-border bg-card sm:max-w-sm">
@@ -404,9 +583,7 @@ function Index() {
             </div>
 
             <div>
-              <p className="mb-2 text-center text-xs uppercase tracking-wide text-muted-foreground">
-                Verification PIN
-              </p>
+              <p className="mb-2 text-center text-xs uppercase tracking-wide text-muted-foreground">Verification PIN</p>
               <div className="flex justify-center gap-2" aria-label={`PIN ${pin}`}>
                 {pin.split("").map((digit, i) => (
                   <span
@@ -419,7 +596,7 @@ function Index() {
               </div>
             </div>
 
-            <Button type="button" size="lg" onClick={confirmTransfer} className="glow w-full font-semibold">
+            <Button type="button" size="lg" onClick={confirmTransfer} className="btn-gradient glow w-full font-semibold">
               <Check className="mr-2 h-5 w-5" />
               Confirm Transfer Complete
             </Button>
